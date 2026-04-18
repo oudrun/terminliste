@@ -1,161 +1,141 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Repositories;
 
-use App\Support\Database;
-use PDO;
+use Illuminate\Support\Facades\DB;
 
 final class TrialRepository
 {
-    private PDO $pdo;
-
-    public function __construct()
-    {
-        $this->pdo = Database::getPdo();
-    }
-
     public function getAllTrials(): array
     {
-        return $this->pdo->query('SELECT * FROM dog_trials ORDER BY date_start ASC')->fetchAll();
+        return DB::table('dog_trials')->orderBy('date_start')->get()->map(fn ($row) => (array) $row)->all();
     }
 
     public function getClassesByTrial(int $trialId): array
     {
-        $stmt = $this->pdo->prepare(
-            "SELECT c.*, COUNT(r.id) AS registration_count
-             FROM trial_classes c
-             LEFT JOIN registrations r ON r.class_id = c.id AND r.status <> 'cancelled'
-             WHERE c.trial_id = ?
-             GROUP BY c.id
-             ORDER BY c.start_time ASC"
-        );
-
-        $stmt->execute([$trialId]);
-
-        return $stmt->fetchAll();
+        return DB::table('trial_classes as c')
+            ->leftJoin('registrations as r', function ($join): void {
+                $join->on('r.class_id', '=', 'c.id')->where('r.status', '<>', 'cancelled');
+            })
+            ->select('c.*', DB::raw('COUNT(r.id) as registration_count'))
+            ->where('c.trial_id', $trialId)
+            ->groupBy('c.id', 'c.trial_id', 'c.name', 'c.start_time', 'c.judge', 'c.price', 'c.max_participants', 'c.notes', 'c.created_at', 'c.updated_at')
+            ->orderBy('c.start_time')
+            ->get()
+            ->map(fn ($row) => (array) $row)
+            ->all();
     }
 
     public function getClassWithTrial(int $classId): ?array
     {
-        $stmt = $this->pdo->prepare(
-            "SELECT c.*, t.title, t.organizer, t.location, t.trial_place, t.trial_number, t.contact_person,
-                    t.contact_phone, t.contact_email, t.responsible_club, t.date_start, t.date_end,
-                    t.registration_deadline, COUNT(r.id) AS registration_count
-             FROM trial_classes c
-             INNER JOIN dog_trials t ON t.id = c.trial_id
-             LEFT JOIN registrations r ON r.class_id = c.id AND r.status <> 'cancelled'
-             WHERE c.id = ?
-             GROUP BY c.id, t.title, t.organizer, t.location, t.trial_place, t.trial_number, t.contact_person,
-                      t.contact_phone, t.contact_email, t.responsible_club, t.date_start, t.date_end, t.registration_deadline"
-        );
+        $row = DB::table('trial_classes as c')
+            ->join('dog_trials as t', 't.id', '=', 'c.trial_id')
+            ->leftJoin('registrations as r', function ($join): void {
+                $join->on('r.class_id', '=', 'c.id')->where('r.status', '<>', 'cancelled');
+            })
+            ->select('c.*', 't.title', 't.organizer', 't.location', 't.trial_place', 't.trial_number', 't.contact_person', 't.contact_phone', 't.contact_email', 't.responsible_club', 't.date_start', 't.date_end', 't.registration_deadline', DB::raw('COUNT(r.id) as registration_count'))
+            ->where('c.id', $classId)
+            ->groupBy('c.id', 'c.trial_id', 'c.name', 'c.start_time', 'c.judge', 'c.price', 'c.max_participants', 'c.notes', 'c.created_at', 'c.updated_at', 't.id', 't.title', 't.organizer', 't.location', 't.trial_place', 't.trial_number', 't.contact_person', 't.contact_phone', 't.contact_email', 't.responsible_club', 't.date_start', 't.date_end', 't.registration_deadline')
+            ->first();
 
-        $stmt->execute([$classId]);
-        $row = $stmt->fetch();
-
-        return $row ?: null;
+        return $row ? (array) $row : null;
     }
 
     public function getAllClasses(): array
     {
-        return $this->pdo->query(
-            'SELECT c.*, t.title AS trial_title
-             FROM trial_classes c
-             INNER JOIN dog_trials t ON t.id = c.trial_id
-             ORDER BY t.date_start ASC, c.start_time ASC'
-        )->fetchAll();
+        return DB::table('trial_classes as c')
+            ->join('dog_trials as t', 't.id', '=', 'c.trial_id')
+            ->select('c.*', 't.title as trial_title')
+            ->orderBy('t.date_start')
+            ->orderBy('c.start_time')
+            ->get()
+            ->map(fn ($row) => (array) $row)
+            ->all();
     }
 
     public function getAllRegistrations(): array
     {
-        return $this->pdo->query(
-            "SELECT r.*, c.name AS class_name, t.title AS trial_title
-             FROM registrations r
-             INNER JOIN trial_classes c ON c.id = r.class_id
-             INNER JOIN dog_trials t ON t.id = c.trial_id
-             ORDER BY r.created_at DESC"
-        )->fetchAll();
+        return DB::table('registrations as r')
+            ->join('trial_classes as c', 'c.id', '=', 'r.class_id')
+            ->join('dog_trials as t', 't.id', '=', 'c.trial_id')
+            ->select('r.*', 'c.name as class_name', 't.title as trial_title')
+            ->orderByDesc('r.created_at')
+            ->get()
+            ->map(fn ($row) => (array) $row)
+            ->all();
     }
 
     public function addTrial(array $data): void
     {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO dog_trials (
-                trial_number, title, organizer, location, trial_place, date_start, date_end,
-                registration_deadline, description, contact_person, contact_phone, contact_email, responsible_club
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-
-        $stmt->execute([
-            trim((string) ($data['trial_number'] ?? '')),
-            trim((string) ($data['title'] ?? '')),
-            trim((string) ($data['organizer'] ?? '')),
-            trim((string) ($data['location'] ?? '')),
-            trim((string) ($data['trial_place'] ?? '')),
-            (string) ($data['date_start'] ?? ''),
-            (string) ($data['date_end'] ?? ''),
-            (string) ($data['registration_deadline'] ?? ''),
-            trim((string) ($data['description'] ?? '')),
-            trim((string) ($data['contact_person'] ?? '')),
-            trim((string) ($data['contact_phone'] ?? '')),
-            trim((string) ($data['contact_email'] ?? '')),
-            trim((string) ($data['responsible_club'] ?? '')),
+        DB::table('dog_trials')->insert([
+            'trial_number' => trim((string) ($data['trial_number'] ?? '')),
+            'title' => trim((string) ($data['title'] ?? '')),
+            'organizer' => trim((string) ($data['organizer'] ?? '')),
+            'location' => trim((string) ($data['location'] ?? '')),
+            'trial_place' => trim((string) ($data['trial_place'] ?? '')),
+            'date_start' => (string) ($data['date_start'] ?? ''),
+            'date_end' => (string) ($data['date_end'] ?? ''),
+            'registration_deadline' => (string) ($data['registration_deadline'] ?? ''),
+            'description' => trim((string) ($data['description'] ?? '')),
+            'contact_person' => trim((string) ($data['contact_person'] ?? '')),
+            'contact_phone' => trim((string) ($data['contact_phone'] ?? '')),
+            'contact_email' => trim((string) ($data['contact_email'] ?? '')),
+            'responsible_club' => trim((string) ($data['responsible_club'] ?? '')),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 
     public function addClass(array $data): void
     {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO trial_classes (trial_id, name, start_time, judge, price, max_participants, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
-        );
-
-        $stmt->execute([
-            (int) ($data['trial_id'] ?? 0),
-            trim((string) ($data['name'] ?? '')),
-            ($data['start_time'] ?? '') ?: null,
-            trim((string) ($data['judge'] ?? '')),
-            (float) ($data['price'] ?? 0),
-            (int) ($data['max_participants'] ?? 10),
-            trim((string) ($data['notes'] ?? '')),
+        DB::table('trial_classes')->insert([
+            'trial_id' => (int) ($data['trial_id'] ?? 0),
+            'name' => trim((string) ($data['name'] ?? '')),
+            'start_time' => ($data['start_time'] ?? '') ?: null,
+            'judge' => trim((string) ($data['judge'] ?? '')),
+            'price' => (float) ($data['price'] ?? 0),
+            'max_participants' => (int) ($data['max_participants'] ?? 10),
+            'notes' => trim((string) ($data['notes'] ?? '')),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 
     public function addRegistration(int $classId, array $data): void
     {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO registrations (class_id, owner_name, email, phone, dog_name, dog_regno, dog_breed, dog_class, comment)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-
-        $stmt->execute([
-            $classId,
-            trim((string) ($data['owner_name'] ?? '')),
-            trim((string) ($data['email'] ?? '')),
-            trim((string) ($data['phone'] ?? '')),
-            trim((string) ($data['dog_name'] ?? '')),
-            trim((string) ($data['dog_regno'] ?? '')),
-            trim((string) ($data['dog_breed'] ?? '')),
-            trim((string) ($data['dog_class'] ?? '')),
-            trim((string) ($data['comment'] ?? '')),
+        DB::table('registrations')->insert([
+            'class_id' => $classId,
+            'owner_name' => trim((string) ($data['owner_name'] ?? '')),
+            'email' => trim((string) ($data['email'] ?? '')),
+            'phone' => trim((string) ($data['phone'] ?? '')),
+            'dog_name' => trim((string) ($data['dog_name'] ?? '')),
+            'dog_regno' => trim((string) ($data['dog_regno'] ?? '')),
+            'dog_breed' => trim((string) ($data['dog_breed'] ?? '')),
+            'dog_class' => trim((string) ($data['dog_class'] ?? '')),
+            'comment' => trim((string) ($data['comment'] ?? '')),
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 
     public function updateRegistrationStatus(int $registrationId, string $status): void
     {
-        $stmt = $this->pdo->prepare('UPDATE registrations SET status = ? WHERE id = ?');
-        $stmt->execute([$status, $registrationId]);
+        DB::table('registrations')->where('id', $registrationId)->update([
+            'status' => $status,
+            'updated_at' => now(),
+        ]);
     }
 
     public function deleteTrial(int $trialId): void
     {
-        $stmt = $this->pdo->prepare('DELETE FROM dog_trials WHERE id = ?');
-        $stmt->execute([$trialId]);
+        DB::table('dog_trials')->where('id', $trialId)->delete();
     }
 
     public function deleteClass(int $classId): void
     {
-        $stmt = $this->pdo->prepare('DELETE FROM trial_classes WHERE id = ?');
-        $stmt->execute([$classId]);
+        DB::table('trial_classes')->where('id', $classId)->delete();
     }
 }

@@ -1,5 +1,5 @@
 name: terminliste
-type: php
+type: laravel
 docroot: "public"
 php_version: "8.4"
 webserver_type: nginx-fpm

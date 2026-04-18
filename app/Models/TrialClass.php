@@ -1,19 +1,37 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Models;
 
-final class TrialClass
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+final class TrialClass extends Model
 {
-    public function __construct(
-        public int $id,
-        public int $trialId,
-        public string $name,
-        public ?string $startTime,
-        public string $judge,
-        public float $price,
-        public int $maxParticipants,
-        public ?string $notes
-    ) {
+    use HasFactory;
+
+    protected $table = 'trial_classes';
+
+    protected $fillable = [
+        'trial_id',
+        'name',
+        'start_time',
+        'judge',
+        'price',
+        'max_participants',
+        'notes',
+    ];
+
+    public function trial(): BelongsTo
+    {
+        return $this->belongsTo(DogTrial::class, 'trial_id');
+    }
+
+    public function registrations(): HasMany
+    {
+        return $this->hasMany(Registration::class, 'class_id');
     }
 }

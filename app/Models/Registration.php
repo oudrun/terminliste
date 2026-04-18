@@ -1,22 +1,34 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Models;
 
-final class Registration
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+final class Registration extends Model
 {
-    public function __construct(
-        public int $id,
-        public int $classId,
-        public string $ownerName,
-        public string $email,
-        public string $phone,
-        public string $dogName,
-        public string $dogRegno,
-        public string $dogBreed,
-        public string $dogClass,
-        public string $comment,
-        public string $status
-    ) {
+    use HasFactory;
+
+    protected $table = 'registrations';
+
+    protected $fillable = [
+        'class_id',
+        'owner_name',
+        'email',
+        'phone',
+        'dog_name',
+        'dog_regno',
+        'dog_breed',
+        'dog_class',
+        'comment',
+        'status',
+    ];
+
+    public function class(): BelongsTo
+    {
+        return $this->belongsTo(TrialClass::class, 'class_id');
     }
 }

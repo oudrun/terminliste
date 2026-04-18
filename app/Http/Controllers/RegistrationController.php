@@ -1,35 +1,42 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
 use App\Repositories\TrialRepository;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
-final class RegistrationController
+final class RegistrationController extends Controller
 {
-    public function handle(int $classId): void
+    public function handle(Request $request): View|RedirectResponse
     {
+        $classId = (int) $request->query('class_id', 0);
         $repository = new TrialRepository();
         $class = $repository->getClassWithTrial($classId);
 
         if ($class === null) {
-            flash('Fant ikke valgt klasse.', 'error');
-            redirect('/');
+            return redirect()->route('home')->with('flash', [
+                'message' => 'Fant ikke valgt klasse.',
+                'type' => 'error',
+            ]);
         }
 
         $errors = [];
         $formData = [
-            'owner_name' => trim((string) ($_POST['owner_name'] ?? '')),
-            'email' => trim((string) ($_POST['email'] ?? '')),
-            'phone' => trim((string) ($_POST['phone'] ?? '')),
-            'dog_name' => trim((string) ($_POST['dog_name'] ?? '')),
-            'dog_regno' => trim((string) ($_POST['dog_regno'] ?? '')),
-            'dog_breed' => trim((string) ($_POST['dog_breed'] ?? '')),
-            'dog_class' => trim((string) ($_POST['dog_class'] ?? '')),
-            'comment' => trim((string) ($_POST['comment'] ?? '')),
+            'owner_name' => trim((string) $request->input('owner_name', '')),
+            'email' => trim((string) $request->input('email', '')),
+            'phone' => trim((string) $request->input('phone', '')),
+            'dog_name' => trim((string) $request->input('dog_name', '')),
+            'dog_regno' => trim((string) $request->input('dog_regno', '')),
+            'dog_breed' => trim((string) $request->input('dog_breed', '')),
+            'dog_class' => trim((string) $request->input('dog_class', '')),
+            'comment' => trim((string) $request->input('comment', '')),
         ];
 
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($request->isMethod('post')) {
             if ($formData['owner_name'] === '') {
                 $errors[] = 'Fører eller eier må fylles ut.';
             }
@@ -50,14 +57,17 @@ final class RegistrationController
 
             if ($errors === []) {
                 $repository->addRegistration($classId, $formData);
-                flash('Påmeldingen er registrert og venter på bekreftelse.', 'success');
-                redirect('/');
+
+                return redirect()->route('home')->with('flash', [
+                    'message' => 'Påmeldingen er registrert og venter på bekreftelse.',
+                    'type' => 'success',
+                ]);
             }
         }
 
         $available = max(0, (int) $class['max_participants'] - (int) $class['registration_count']);
 
-        renderView('apply', [
+        return view('apply', [
             'class' => $class,
             'available' => $available,
             'errors' => $errors,

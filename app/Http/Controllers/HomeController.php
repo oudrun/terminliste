@@ -1,13 +1,15 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
 use App\Repositories\TrialRepository;
+use Illuminate\Contracts\View\View;
 
-final class HomeController
+final class HomeController extends Controller
 {
-    public function index(): void
+    public function index(): View
     {
         $repository = new TrialRepository();
         $trials = $repository->getAllTrials();
@@ -17,8 +19,7 @@ final class HomeController
             $classesByTrial[(int) $trial['id']] = $repository->getClassesByTrial((int) $trial['id']);
         }
 
-        renderView('home', [
-            'flash' => getFlash(),
+        return view('home', [
             'trials' => $trials,
             'classesByTrial' => $classesByTrial,
         ]);
