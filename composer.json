@@ -1,0 +1,19 @@
+{
+    "name": "terminliste/hundeprover",
+    "description": "Laravel-ready PHP structure for dog trial schedules and registrations.",
+    "type": "project",
+    "require": {
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        },
+        "files": [
+            "app/Support/helpers.php"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
